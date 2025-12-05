@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fatin's Garage</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Racing+Sans+One&family=Exo+2:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<style>
+    .font-racing { font-family: 'Racing Sans One', cursive; }
+    .stripe { position: fixed; top: 0; bottom: 0; width: 4px; transform: skewX(-15deg); opacity: 0.3; z-index: 0; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #061D42; }
+    ::-webkit-scrollbar-thumb { background: #3671C6; border-radius: 4px; }
+    .light { width: 40px; height: 40px; border-radius: 50%; background-color: #333; border: 2px solid #555; transition: background-color 0.1s; }
+    .light.on { background-color: #FF1E00; box-shadow: 0 0 15px #FF1E00; }
+    @media (max-width: 640px) { .light { width: 30px; height: 30px; } }
+</style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
