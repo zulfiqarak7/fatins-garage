@@ -53,7 +53,7 @@ const F1Lights = ({ stage }: { stage: number }) => {
     const lights = [1, 2, 3, 4, 5];
     
     return (
-        <div className="flex justify-center gap-2 sm:gap-4 mb-8 bg-black/40 p-4 rounded-xl border border-gray-700 w-fit mx-auto">
+        <div className="flex justify-center gap-2 sm:gap-4 mb-8 bg-black/40 p-4 rounded-xl border border-gray-700 w-fit mx-auto max-w-full">
             {lights.map((i) => (
                 <div key={i} className="flex flex-col gap-2">
                     {/* The light housing */}
@@ -72,8 +72,9 @@ const TimerDisplay = ({ time }: { time: number }) => {
         return `${minutes > 0 ? minutes + ':' : ''}${seconds < 10 && minutes > 0 ? '0' : ''}${seconds}.${milliseconds < 10 ? '0' : ''}${milliseconds}`;
     };
 
+    // Reduced to text-6xl on mobile to prevent overflow on small screens
     return (
-        <div className="text-7xl sm:text-9xl font-racing tracking-wider tabular-nums text-white drop-shadow-lg">
+        <div className="text-6xl sm:text-9xl font-racing tracking-wider tabular-nums text-white drop-shadow-lg break-words">
             {formatTime(time)}
         </div>
     );
@@ -117,10 +118,10 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     const points = recentData.map((d, i) => `${getX(i)},${getY(d.time)}`).join(' ');
 
     return (
-        <div className="w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm">
+        <div className="w-full max-w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm overflow-hidden">
             <h3 className="text-sm font-racing text-gray-400 mb-2 uppercase tracking-widest">Telemetry (Last 20 Solves)</h3>
             <div className="w-full overflow-hidden relative" style={{ height: `${height}px` }}>
-                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
                     {/* Grid lines */}
                     <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#ffffff10" strokeWidth="1" />
                     <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#ffffff10" strokeWidth="1" />
@@ -409,13 +410,13 @@ export default function App() {
 
 
     return (
-        <div className="min-h-screen relative overflow-hidden pb-12 bg-[#061D42] text-white font-sans">
+        <div className="min-h-screen relative overflow-x-hidden pb-12 bg-[#061D42] text-white font-sans w-full">
             {/* Decorative Stripes */}
             <div className="stripe bg-[#FF1E00] right-20"></div>
             <div className="stripe bg-[#FFCC00] right-16"></div>
 
             {/* Header */}
-            <header className="p-6 flex justify-between items-center relative z-10">
+            <header className="p-6 flex justify-between items-center relative z-10 w-full max-w-full">
                 <div>
                     <h1 className="text-3xl sm:text-4xl font-racing italic bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
                         FATIN'S <span className="text-[#FF1E00]">GARAGE</span>
@@ -427,7 +428,7 @@ export default function App() {
                 </div>
             </header>
 
-            <main className="max-w-4xl mx-auto px-4 relative z-10 mt-4">
+            <main className="max-w-4xl mx-auto px-4 relative z-10 mt-4 w-full overflow-hidden">
                 
                 {/* ERROR BANNERS */}
                 {authError && (
@@ -471,7 +472,7 @@ export default function App() {
                         Connecting to Telemetry...
                     </div>
                 ) : history.length > 0 ? (
-                    <div className="mb-12">
+                    <div className="mb-12 w-full max-w-full">
                         <div className="flex justify-between items-end mb-2">
                             <h3 className="text-xs text-gray-400 uppercase tracking-widest">Recent Solves</h3>
                             <button 
@@ -481,7 +482,7 @@ export default function App() {
                                 [CLEAR DATA]
                             </button>
                         </div>
-                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar w-full">
                             {history.slice(0, 10).map((t) => (
                                 <div key={t.id} className="flex-shrink-0 bg-[#3671C6]/20 border border-[#3671C6] px-4 py-2 rounded-lg font-mono text-[#FFCC00]">
                                     {(t.time / 1000).toFixed(2)}s
