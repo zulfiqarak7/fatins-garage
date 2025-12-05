@@ -12,6 +12,8 @@ import {
   getFirestore, 
   collection, 
   addDoc, 
+  deleteDoc,
+  doc,
   onSnapshot, 
   serverTimestamp, 
   query,
@@ -368,7 +370,26 @@ export default function App() {
                 setDataError("Failed to save: " + e.message);
             }
         }
-    }, [user]); // Logic no longer depends on 'time' state, preventing bugs
+    }, [user]); 
+
+    // Clear History Logic
+    const clearHistory = async () => {
+        if (!user || history.length === 0) return;
+        
+        // Use browser confirm for safety
+        if (window.confirm("CONFIRM: Delete all race telemetry? This action is permanent.")) {
+            try {
+                // Delete all documents in the history
+                const deletePromises = history.map(solve => 
+                    deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'solves', solve.id))
+                );
+                await Promise.all(deletePromises);
+            } catch (e: any) {
+                console.error("Error clearing history:", e);
+                setDataError("Failed to clear data: " + e.message);
+            }
+        }
+    };
 
     // Spacebar handler
     useEffect(() => {
@@ -451,7 +472,15 @@ export default function App() {
                     </div>
                 ) : history.length > 0 ? (
                     <div className="mb-12">
-                        <h3 className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Recent Solves</h3>
+                        <div className="flex justify-between items-end mb-2">
+                            <h3 className="text-xs text-gray-400 uppercase tracking-widest">Recent Solves</h3>
+                            <button 
+                                onClick={clearHistory}
+                                className="text-xs text-red-500/70 hover:text-red-500 font-mono transition-colors"
+                            >
+                                [CLEAR DATA]
+                            </button>
+                        </div>
                         <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
                             {history.slice(0, 10).map((t) => (
                                 <div key={t.id} className="flex-shrink-0 bg-[#3671C6]/20 border border-[#3671C6] px-4 py-2 rounded-lg font-mono text-[#FFCC00]">
