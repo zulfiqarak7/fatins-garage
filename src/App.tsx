@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -14,7 +14,9 @@ import {
   onSnapshot, 
   serverTimestamp, 
   query,
-  Timestamp 
+  Timestamp,
+  QuerySnapshot,
+  DocumentData
 } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
@@ -91,12 +93,15 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     const timeRange = maxTime - minTime || 1;
 
     // Helper to scale Y (time)
-    // Lower time is better (higher on graph)
+    // Standard graph: Higher value (Slower time) = Higher Y (Bottom of SVG is high Y value usually? No SVG 0,0 is top-left)
+    // SVG Y: 0 is Top, Height is Bottom.
+    // We want Slower (High Time) at Top (0)? Or Faster (Low Time) at Top?
+    // Usually "Progress" means lines going DOWN is good for speedcubing.
+    // Let's map MinTime (Fastest) to Bottom (Height), MaxTime (Slowest) to Top (0).
     const getY = (val: number) => {
         const normalized = (val - minTime) / timeRange; 
-        return height - padding - (normalized * (height - (padding * 2))) - padding; 
-        // Standard graph: Higher value = Higher Y.
-        // We want lower times (faster) at the bottom (standard Y-axis).
+        // normalized 0 (fastest) -> result height-padding (Bottom)
+        // normalized 1 (slowest) -> result padding (Top)
         return height - padding - ((1 - normalized) * (height - (padding * 2)));
     };
 
@@ -105,7 +110,7 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
         return padding + (index / (recentData.length - 1)) * (width - (padding * 2));
     };
 
-    const points = recentData.map((d, i) => `${getX(i)},${height - padding - ((d.time - minTime) / timeRange) * (height - padding * 2)}`).join(' ');
+    const points = recentData.map((d, i) => `${getX(i)},${getY(d.time)}`).join(' ');
 
     return (
         <div className="w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm">
@@ -130,7 +135,7 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
                         <circle 
                             key={d.id} 
                             cx={getX(i)} 
-                            cy={height - padding - ((d.time - minTime) / timeRange) * (height - padding * 2)} 
+                            cy={getY(d.time)} 
                             r="3" 
                             fill="#FFCC00" 
                         />
@@ -248,7 +253,7 @@ export default function App() {
         };
         initAuth();
 
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser: User | null) => {
             setUser(currentUser);
         });
         return () => unsubscribe();
@@ -262,8 +267,8 @@ export default function App() {
         // We fetch all for this user and sort in memory for this simple app.
         const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'solves'));
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const solves = snapshot.docs.map(doc => ({
+        const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+            const solves = snapshot.docs.map((doc: DocumentData) => ({
                 id: doc.id,
                 ...doc.data()
             })) as Solve[];
@@ -276,7 +281,7 @@ export default function App() {
             });
 
             setHistory(solves);
-        }, (error) => {
+        }, (error: any) => {
             console.error("Data fetch error:", error);
         });
 
