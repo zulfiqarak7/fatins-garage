@@ -4,9 +4,10 @@ import {
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged, 
-  signInWithCustomToken,
-  User 
+  signInWithCustomToken
 } from 'firebase/auth';
+import type { User } from 'firebase/auth'; // Fixed: Explicit type import
+
 import { 
   getFirestore, 
   collection, 
@@ -14,10 +15,9 @@ import {
   onSnapshot, 
   serverTimestamp, 
   query,
-  Timestamp,
-  QuerySnapshot,
-  DocumentData
+  Timestamp
 } from 'firebase/firestore';
+import type { QuerySnapshot, DocumentData } from 'firebase/firestore'; // Fixed: Explicit type import
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -93,15 +93,9 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     const timeRange = maxTime - minTime || 1;
 
     // Helper to scale Y (time)
-    // Standard graph: Higher value (Slower time) = Higher Y (Bottom of SVG is high Y value usually? No SVG 0,0 is top-left)
-    // SVG Y: 0 is Top, Height is Bottom.
-    // We want Slower (High Time) at Top (0)? Or Faster (Low Time) at Top?
-    // Usually "Progress" means lines going DOWN is good for speedcubing.
-    // Let's map MinTime (Fastest) to Bottom (Height), MaxTime (Slowest) to Top (0).
+    // We map MinTime (Fastest) to Bottom (Height), MaxTime (Slowest) to Top (0).
     const getY = (val: number) => {
         const normalized = (val - minTime) / timeRange; 
-        // normalized 0 (fastest) -> result height-padding (Bottom)
-        // normalized 1 (slowest) -> result padding (Top)
         return height - padding - ((1 - normalized) * (height - (padding * 2)));
     };
 
@@ -297,8 +291,9 @@ export default function App() {
         setTime(0);
 
         let stage = 0;
-        // @ts-ignore
-        lightsRef.current = setInterval(() => {
+        
+        // Using window.setInterval ensures it returns a number ID (not NodeJS.Timeout)
+        lightsRef.current = window.setInterval(() => {
             stage++;
             setLightStage(stage);
             
@@ -319,8 +314,8 @@ export default function App() {
     const startTimer = () => {
         setIsRunning(true);
         const startTime = Date.now();
-        // @ts-ignore
-        timerRef.current = setInterval(() => {
+        // Using window.setInterval ensures it returns a number ID
+        timerRef.current = window.setInterval(() => {
             setTime(Date.now() - startTime);
         }, 10);
     };
