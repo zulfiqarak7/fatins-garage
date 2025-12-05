@@ -6,7 +6,7 @@ import {
   onAuthStateChanged, 
   signInWithCustomToken
 } from 'firebase/auth';
-import type { User } from 'firebase/auth'; // Fixed: Explicit type import
+import type { User } from 'firebase/auth';
 
 import { 
   getFirestore, 
@@ -17,7 +17,7 @@ import {
   query,
   Timestamp
 } from 'firebase/firestore';
-import type { QuerySnapshot, DocumentData } from 'firebase/firestore'; // Fixed: Explicit type import
+import type { QuerySnapshot, DocumentData } from 'firebase/firestore';
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
@@ -78,8 +78,17 @@ const TimerDisplay = ({ time }: { time: number }) => {
 };
 
 const ProgressGraph = ({ data }: { data: Solve[] }) => {
-    // Custom SVG Graph
-    if (data.length < 2) return null;
+    if (data.length === 0) return null;
+
+    // Show message if not enough data
+    if (data.length < 2) {
+        return (
+             <div className="w-full bg-black/20 border border-white/10 rounded-xl p-8 mb-8 backdrop-blur-sm text-center">
+                <h3 className="text-sm font-racing text-gray-400 mb-2 uppercase tracking-widest">Telemetry</h3>
+                <p className="text-[#FFCC00] font-mono">Complete at least 2 solves to unlock performance graph.</p>
+            </div>
+        );
+    }
 
     // Use only last 20 solves for the graph to keep it readable
     const recentData = data.slice(0, 20).reverse(); 
@@ -93,7 +102,6 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     const timeRange = maxTime - minTime || 1;
 
     // Helper to scale Y (time)
-    // We map MinTime (Fastest) to Bottom (Height), MaxTime (Slowest) to Top (0).
     const getY = (val: number) => {
         const normalized = (val - minTime) / timeRange; 
         return height - padding - ((1 - normalized) * (height - (padding * 2)));
@@ -228,7 +236,13 @@ export default function App() {
     // Firestore Data State
     const [user, setUser] = useState<User | null>(null);
     const [history, setHistory] = useState<Solve[]>([]);
+    
+    // Debug States
+    const [authError, setAuthError] = useState<string | null>(null);
+    const [dataError, setDataError] = useState<string | null>(null);
+    const [isLoadingData, setIsLoadingData] = useState(false);
 
+    const startTimeRef = useRef<number>(0);
     const timerRef = useRef<number | null>(null);
     const lightsRef = useRef<number | null>(null);
 
@@ -236,19 +250,24 @@ export default function App() {
     useEffect(() => {
         const initAuth = async () => {
             try {
+                // If we are in the special environment with a token, use it
                 if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) {
                     await signInWithCustomToken(auth, (window as any).__initial_auth_token);
                 } else {
+                    // Otherwise try anonymous auth
                     await signInAnonymously(auth);
                 }
-            } catch (err) {
+                setAuthError(null);
+            } catch (err: any) {
                 console.error("Auth failed", err);
+                setAuthError(err.message || "Authentication failed");
             }
         };
         initAuth();
 
         const unsubscribe = onAuthStateChanged(auth, (currentUser: User | null) => {
             setUser(currentUser);
+            if (currentUser) setAuthError(null);
         });
         return () => unsubscribe();
     }, []);
@@ -256,6 +275,9 @@ export default function App() {
     // 2. Fetch Data from Firestore
     useEffect(() => {
         if (!user) return;
+        
+        setIsLoadingData(true);
+        setDataError(null);
 
         // Note: Firestore queries without composite indexes are limited. 
         // We fetch all for this user and sort in memory for this simple app.
@@ -275,8 +297,11 @@ export default function App() {
             });
 
             setHistory(solves);
+            setIsLoadingData(false);
         }, (error: any) => {
             console.error("Data fetch error:", error);
+            setDataError(error.message || "Failed to load data");
+            setIsLoadingData(false);
         });
 
         return () => unsubscribe();
@@ -313,10 +338,10 @@ export default function App() {
 
     const startTimer = () => {
         setIsRunning(true);
-        const startTime = Date.now();
+        startTimeRef.current = Date.now();
         // Using window.setInterval ensures it returns a number ID
         timerRef.current = window.setInterval(() => {
-            setTime(Date.now() - startTime);
+            setTime(Date.now() - startTimeRef.current);
         }, 10);
     };
 
@@ -326,19 +351,24 @@ export default function App() {
         setIsArming(false);
         if (lightsRef.current !== null) clearInterval(lightsRef.current);
         setLightStage(0); 
+
+        // Calculate exact time based on Start Time Ref
+        const finalTime = Date.now() - startTimeRef.current;
+        setTime(finalTime);
         
-        if (time > 0 && user) {
+        if (finalTime > 0 && user) {
             // Save to Firestore
             try {
                 await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'solves'), {
-                    time: time,
+                    time: finalTime,
                     timestamp: serverTimestamp()
                 });
-            } catch (e) {
+            } catch (e: any) {
                 console.error("Error saving time:", e);
+                setDataError("Failed to save: " + e.message);
             }
         }
-    }, [time, user]);
+    }, [user]); // Logic no longer depends on 'time' state, preventing bugs
 
     // Spacebar handler
     useEffect(() => {
@@ -378,6 +408,20 @@ export default function App() {
 
             <main className="max-w-4xl mx-auto px-4 relative z-10 mt-4">
                 
+                {/* ERROR BANNERS */}
+                {authError && (
+                    <div className="bg-red-500/80 border border-red-400 text-white p-4 rounded-lg mb-6 text-center">
+                        <strong>⚠️ Authentication Error:</strong> {authError}
+                        <br/><span className="text-sm">Please enable "Anonymous Authentication" in your Firebase Console.</span>
+                    </div>
+                )}
+                {dataError && (
+                    <div className="bg-yellow-500/80 border border-yellow-400 text-black p-4 rounded-lg mb-6 text-center">
+                        <strong>⚠️ Database Error:</strong> {dataError}
+                        <br/><span className="text-sm">Check your Firestore Security Rules are set to Test Mode.</span>
+                    </div>
+                )}
+
                 {/* Timer Section */}
                 <div className="text-center mb-8">
                     <F1Lights stage={lightStage} />
@@ -401,7 +445,11 @@ export default function App() {
                 <ProgressGraph data={history} />
 
                 {/* Recent Times (Horizontal List) */}
-                {history.length > 0 && (
+                {isLoadingData ? (
+                    <div className="mb-12 text-center text-[#FFCC00] animate-pulse">
+                        Connecting to Telemetry...
+                    </div>
+                ) : history.length > 0 ? (
                     <div className="mb-12">
                         <h3 className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Recent Solves</h3>
                         <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
@@ -411,6 +459,10 @@ export default function App() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                ) : (
+                     <div className="mb-12 text-center text-gray-500 text-sm italic">
+                        {dataError ? "Telemetry offline." : "No previous times found. Complete a solve to begin your career."}
                     </div>
                 )}
 
@@ -431,7 +483,10 @@ export default function App() {
 
             {/* Footer */}
             <footer className="mt-20 text-center text-gray-600 text-sm p-4 border-t border-white/5 relative z-10">
-                <p>Built for Fatin • Unleash the Lion • {user ? `Driver ID: ${user.uid.slice(0,6)}...` : 'Connecting...'}</p>
+                <p>
+                    Built for Fatin • Unleash the Lion • 
+                    {user ? <span className="text-green-500"> Driver ID: {user.uid.slice(0,6)}...</span> : <span className="text-red-500"> Not Connected</span>}
+                </p>
             </footer>
         </div>
     );
