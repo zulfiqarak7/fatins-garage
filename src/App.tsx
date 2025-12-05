@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- Components ---
 
-const F1Lights = ({ stage }) => {
+const F1Lights = ({ stage }: { stage: number }) => {
     // Stage 0: Off, 1: 1 red, 2: 2 red, ..., 5: 5 red, 6: All Off (GO!)
     const lights = [1, 2, 3, 4, 5];
     
@@ -18,8 +18,8 @@ const F1Lights = ({ stage }) => {
     );
 };
 
-const TimerDisplay = ({ time }) => {
-    const formatTime = (ms) => {
+const TimerDisplay = ({ time }: { time: number }) => {
+    const formatTime = (ms: number) => {
         const minutes = Math.floor(ms / 60000);
         const seconds = Math.floor((ms % 60000) / 1000);
         const milliseconds = Math.floor((ms % 1000) / 10);
@@ -117,10 +117,10 @@ export default function App() {
     const [isRunning, setIsRunning] = useState(false);
     const [lightStage, setLightStage] = useState(0); // 0-6
     const [isArming, setIsArming] = useState(false);
-    const [history, setHistory] = useState([]);
+    const [history, setHistory] = useState<number[]>([]);
 
-    const timerRef = useRef(null);
-    const lightsRef = useRef(null);
+    const timerRef = useRef<number | null>(null);
+    const lightsRef = useRef<number | null>(null);
     
     // F1 Start Sequence Logic
     const startSequence = useCallback(() => {
@@ -132,12 +132,13 @@ export default function App() {
 
         let stage = 0;
         // Light up 1 red light every 600ms (Total 3 seconds for 5 lights)
+        // @ts-ignore
         lightsRef.current = setInterval(() => {
             stage++;
             setLightStage(stage);
             
             if (stage === 5) {
-                clearInterval(lightsRef.current);
+                if (lightsRef.current !== null) clearInterval(lightsRef.current);
                 // Random delay between 0.2s and 1.5s before lights out (Reaction test!)
                 const randomDelay = Math.random() * 1000 + 500;
                 
@@ -154,16 +155,17 @@ export default function App() {
     const startTimer = () => {
         setIsRunning(true);
         const startTime = Date.now();
+        // @ts-ignore
         timerRef.current = setInterval(() => {
             setTime(Date.now() - startTime);
         }, 10);
     };
 
     const stopTimer = useCallback(() => {
-        clearInterval(timerRef.current);
+        if (timerRef.current !== null) clearInterval(timerRef.current);
         setIsRunning(false);
         setIsArming(false);
-        clearInterval(lightsRef.current);
+        if (lightsRef.current !== null) clearInterval(lightsRef.current);
         setLightStage(0); // Reset lights
         
         if (time > 0) {
@@ -173,7 +175,7 @@ export default function App() {
 
     // Spacebar handler
     useEffect(() => {
-        const handleKeyDown = (e) => {
+        const handleKeyDown = (e: KeyboardEvent) => {
             if (e.code === 'Space') {
                 e.preventDefault(); // Prevent scrolling
                 if (isRunning) {
