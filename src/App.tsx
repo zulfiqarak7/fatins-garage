@@ -1,4 +1,46 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signInWithCustomToken,
+  User 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  serverTimestamp, 
+  query,
+  Timestamp 
+} from 'firebase/firestore';
+
+// --- Firebase Configuration ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDZGbav4K8Dnp5P9e-5FsHBx6A8JwNvwCs",
+  authDomain: "fatins-garage.firebaseapp.com",
+  projectId: "fatins-garage",
+  storageBucket: "fatins-garage.firebasestorage.app",
+  messagingSenderId: "656862381114",
+  appId: "1:656862381114:web:25d4d9c950300dc50f2103",
+  measurementId: "G-3GZTSQBC26"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// Use a default app ID for your standalone version, or fallback to the environment's ID if present
+const appId = typeof (window as any).__app_id !== 'undefined' ? (window as any).__app_id : 'fatins-garage-default';
+
+// --- Types ---
+interface Solve {
+    id: string;
+    time: number;
+    timestamp: Timestamp | null; // null for pending local writes
+}
 
 // --- Components ---
 
@@ -29,6 +71,72 @@ const TimerDisplay = ({ time }: { time: number }) => {
     return (
         <div className="text-7xl sm:text-9xl font-racing tracking-wider tabular-nums text-white drop-shadow-lg">
             {formatTime(time)}
+        </div>
+    );
+};
+
+const ProgressGraph = ({ data }: { data: Solve[] }) => {
+    // Custom SVG Graph
+    if (data.length < 2) return null;
+
+    // Use only last 20 solves for the graph to keep it readable
+    const recentData = data.slice(0, 20).reverse(); 
+    
+    const height = 150;
+    const width = 600;
+    const padding = 20;
+
+    const maxTime = Math.max(...recentData.map(d => d.time));
+    const minTime = Math.min(...recentData.map(d => d.time));
+    const timeRange = maxTime - minTime || 1;
+
+    // Helper to scale Y (time)
+    // Lower time is better (higher on graph)
+    const getY = (val: number) => {
+        const normalized = (val - minTime) / timeRange; 
+        return height - padding - (normalized * (height - (padding * 2))) - padding; 
+        // Standard graph: Higher value = Higher Y.
+        // We want lower times (faster) at the bottom (standard Y-axis).
+        return height - padding - ((1 - normalized) * (height - (padding * 2)));
+    };
+
+    // Helper to scale X (index)
+    const getX = (index: number) => {
+        return padding + (index / (recentData.length - 1)) * (width - (padding * 2));
+    };
+
+    const points = recentData.map((d, i) => `${getX(i)},${height - padding - ((d.time - minTime) / timeRange) * (height - padding * 2)}`).join(' ');
+
+    return (
+        <div className="w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm">
+            <h3 className="text-sm font-racing text-gray-400 mb-2 uppercase tracking-widest">Telemetry (Last 20 Solves)</h3>
+            <div className="w-full overflow-hidden relative" style={{ height: `${height}px` }}>
+                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+                    {/* Grid lines */}
+                    <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#ffffff10" strokeWidth="1" />
+                    <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#ffffff10" strokeWidth="1" />
+                    
+                    {/* The Line */}
+                    <polyline 
+                        points={points} 
+                        fill="none" 
+                        stroke="#FF1E00" 
+                        strokeWidth="2" 
+                        vectorEffect="non-scaling-stroke"
+                    />
+                    
+                    {/* Dots */}
+                    {recentData.map((d, i) => (
+                        <circle 
+                            key={d.id} 
+                            cx={getX(i)} 
+                            cy={height - padding - ((d.time - minTime) / timeRange) * (height - padding * 2)} 
+                            r="3" 
+                            fill="#FFCC00" 
+                        />
+                    ))}
+                </svg>
+            </div>
         </div>
     );
 };
@@ -117,10 +225,63 @@ export default function App() {
     const [isRunning, setIsRunning] = useState(false);
     const [lightStage, setLightStage] = useState(0); // 0-6
     const [isArming, setIsArming] = useState(false);
-    const [history, setHistory] = useState<number[]>([]);
+    
+    // Firestore Data State
+    const [user, setUser] = useState<User | null>(null);
+    const [history, setHistory] = useState<Solve[]>([]);
 
     const timerRef = useRef<number | null>(null);
     const lightsRef = useRef<number | null>(null);
+
+    // 1. Initialize Auth
+    useEffect(() => {
+        const initAuth = async () => {
+            try {
+                if (typeof (window as any).__initial_auth_token !== 'undefined' && (window as any).__initial_auth_token) {
+                    await signInWithCustomToken(auth, (window as any).__initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                console.error("Auth failed", err);
+            }
+        };
+        initAuth();
+
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // 2. Fetch Data from Firestore
+    useEffect(() => {
+        if (!user) return;
+
+        // Note: Firestore queries without composite indexes are limited. 
+        // We fetch all for this user and sort in memory for this simple app.
+        const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'solves'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const solves = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as Solve[];
+
+            // Sort by timestamp descending (newest first)
+            solves.sort((a, b) => {
+                const ta = a.timestamp?.seconds || 0;
+                const tb = b.timestamp?.seconds || 0;
+                return tb - ta;
+            });
+
+            setHistory(solves);
+        }, (error) => {
+            console.error("Data fetch error:", error);
+        });
+
+        return () => unsubscribe();
+    }, [user]);
     
     // F1 Start Sequence Logic
     const startSequence = useCallback(() => {
@@ -131,7 +292,6 @@ export default function App() {
         setTime(0);
 
         let stage = 0;
-        // Light up 1 red light every 600ms (Total 3 seconds for 5 lights)
         // @ts-ignore
         lightsRef.current = setInterval(() => {
             stage++;
@@ -139,7 +299,6 @@ export default function App() {
             
             if (stage === 5) {
                 if (lightsRef.current !== null) clearInterval(lightsRef.current);
-                // Random delay between 0.2s and 1.5s before lights out (Reaction test!)
                 const randomDelay = Math.random() * 1000 + 500;
                 
                 setTimeout(() => {
@@ -148,7 +307,7 @@ export default function App() {
                     startTimer();
                 }, randomDelay);
             }
-        }, 600); // 600ms * 5 = 3000ms (3 seconds)
+        }, 600); 
 
     }, [isRunning, isArming]);
 
@@ -161,23 +320,31 @@ export default function App() {
         }, 10);
     };
 
-    const stopTimer = useCallback(() => {
+    const stopTimer = useCallback(async () => {
         if (timerRef.current !== null) clearInterval(timerRef.current);
         setIsRunning(false);
         setIsArming(false);
         if (lightsRef.current !== null) clearInterval(lightsRef.current);
-        setLightStage(0); // Reset lights
+        setLightStage(0); 
         
-        if (time > 0) {
-            setHistory(prev => [time, ...prev].slice(0, 5)); // Keep last 5
+        if (time > 0 && user) {
+            // Save to Firestore
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'solves'), {
+                    time: time,
+                    timestamp: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("Error saving time:", e);
+            }
         }
-    }, [time]);
+    }, [time, user]);
 
     // Spacebar handler
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.code === 'Space') {
-                e.preventDefault(); // Prevent scrolling
+                e.preventDefault(); 
                 if (isRunning) {
                     stopTimer();
                 } else if (!isArming) {
@@ -212,7 +379,7 @@ export default function App() {
             <main className="max-w-4xl mx-auto px-4 relative z-10 mt-4">
                 
                 {/* Timer Section */}
-                <div className="text-center mb-12">
+                <div className="text-center mb-8">
                     <F1Lights stage={lightStage} />
                     
                     <div 
@@ -230,14 +397,20 @@ export default function App() {
                     </div>
                 </div>
 
-                {/* Recent Times (Your Personal Board) */}
+                {/* Progress Graph */}
+                <ProgressGraph data={history} />
+
+                {/* Recent Times (Horizontal List) */}
                 {history.length > 0 && (
-                    <div className="mb-12 flex justify-center gap-4 flex-wrap">
-                        {history.map((t, i) => (
-                            <div key={i} className="bg-[#3671C6]/20 border border-[#3671C6] px-4 py-2 rounded-lg font-mono text-[#FFCC00]">
-                                {(t / 1000).toFixed(2)}s
-                            </div>
-                        ))}
+                    <div className="mb-12">
+                        <h3 className="text-xs text-gray-400 mb-2 uppercase tracking-widest">Recent Solves</h3>
+                        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                            {history.slice(0, 10).map((t) => (
+                                <div key={t.id} className="flex-shrink-0 bg-[#3671C6]/20 border border-[#3671C6] px-4 py-2 rounded-lg font-mono text-[#FFCC00]">
+                                    {(t.time / 1000).toFixed(2)}s
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -258,7 +431,7 @@ export default function App() {
 
             {/* Footer */}
             <footer className="mt-20 text-center text-gray-600 text-sm p-4 border-t border-white/5 relative z-10">
-                <p>Built for Fatin • Unleash the Lion</p>
+                <p>Built for Fatin • Unleash the Lion • {user ? `Driver ID: ${user.uid.slice(0,6)}...` : 'Connecting...'}</p>
             </footer>
         </div>
     );
