@@ -96,9 +96,10 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     // Use only last 20 solves for the graph to keep it readable
     const recentData = data.slice(0, 20).reverse(); 
     
-    const height = 150;
-    const width = 600;
-    const padding = 20;
+    // Normalized Coordinate System (0-100)
+    const viewWidth = 100;
+    const viewHeight = 50;
+    const padding = 5; // Internal padding in grid units
 
     const maxTime = Math.max(...recentData.map(d => d.time));
     const minTime = Math.min(...recentData.map(d => d.time));
@@ -107,24 +108,28 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
     // Helper to scale Y (time)
     const getY = (val: number) => {
         const normalized = (val - minTime) / timeRange; 
-        return height - padding - ((1 - normalized) * (height - (padding * 2)));
+        return viewHeight - padding - ((1 - normalized) * (viewHeight - (padding * 2)));
     };
 
     // Helper to scale X (index)
     const getX = (index: number) => {
-        return padding + (index / (recentData.length - 1)) * (width - (padding * 2));
+        return padding + (index / (recentData.length - 1)) * (viewWidth - (padding * 2));
     };
 
     const points = recentData.map((d, i) => `${getX(i)},${getY(d.time)}`).join(' ');
 
     return (
-        <div className="w-full max-w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm overflow-hidden">
+        <div className="w-full max-w-full bg-black/20 border border-white/10 rounded-xl p-4 mb-8 backdrop-blur-sm overflow-hidden min-w-0">
             <h3 className="text-sm font-racing text-gray-400 mb-2 uppercase tracking-widest">Telemetry (Last 20 Solves)</h3>
-            <div className="w-full overflow-hidden relative" style={{ height: `${height}px` }}>
-                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
+            <div className="w-full h-40 relative">
+                <svg 
+                    viewBox={`0 0 ${viewWidth} ${viewHeight}`} 
+                    className="w-full h-full" 
+                    preserveAspectRatio="none"
+                >
                     {/* Grid lines */}
-                    <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#ffffff10" strokeWidth="1" />
-                    <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#ffffff10" strokeWidth="1" />
+                    <line x1={padding} y1={padding} x2={viewWidth-padding} y2={padding} stroke="#ffffff10" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+                    <line x1={padding} y1={viewHeight-padding} x2={viewWidth-padding} y2={viewHeight-padding} stroke="#ffffff10" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
                     
                     {/* The Line */}
                     <polyline 
@@ -133,6 +138,8 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
                         stroke="#FF1E00" 
                         strokeWidth="2" 
                         vectorEffect="non-scaling-stroke"
+                        strokeLinejoin="round"
+                        strokeLinecap="round"
                     />
                     
                     {/* Dots */}
@@ -141,8 +148,9 @@ const ProgressGraph = ({ data }: { data: Solve[] }) => {
                             key={d.id} 
                             cx={getX(i)} 
                             cy={getY(d.time)} 
-                            r="3" 
+                            r="1" 
                             fill="#FFCC00" 
+                            vectorEffect="non-scaling-stroke"
                         />
                     ))}
                 </svg>
